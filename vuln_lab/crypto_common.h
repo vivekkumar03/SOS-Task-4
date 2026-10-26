@@ -32,12 +32,14 @@
 #define IV_LEN         12          /* bytes – recommended GCM IV length        */
 #define KEY_LEN        32          /* bytes – AES-256                          */
 #define TAG_LEN        16          /* bytes – GCM authentication tag           */
-#define PBKDF2_ITER    1          /* LAB FLAW: intentionally too few iterations */      /* iterations – OWASP 2023 minimum for SHA-256 */
+#define PBKDF2_ITER    600000      /* PBKDF2-HMAC-SHA256 work factor            */
 
 /* ── Application limits ───────────────────────────────────────────────────── */
 #define MAX_MSG_LEN    4096
 #define MAX_PASS_LEN   256
 #define OUTPUT_FILE    "text.ct"
+#define HEADER_LEN     (SALT_LEN + IV_LEN + TAG_LEN)
+#define MAX_B64_LEN    (4 * ((HEADER_LEN + MAX_MSG_LEN + 2) / 3))
 
 /* ── Function-pointer type for the key-derivation strategy ───────────────── */
 /* Signature: (password, pass_len, salt, salt_len, out_key, key_len) -> 1 ok  */

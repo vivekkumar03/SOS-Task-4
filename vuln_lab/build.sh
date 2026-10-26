@@ -1,15 +1,13 @@
 #!/bin/bash
-# build.sh – compile task41enc and task41dec without requiring make.
+# build.sh – build task41enc and task41dec using the project Makefile.
 #
-# Usage:
-#   chmod +x build.sh
-#   ./build.sh
+# Usage: bash build.sh
 #
-# Requires: gcc, libssl-dev
+# Requires: make, gcc, Homebrew OpenSSL 3
 
 set -euo pipefail
 
-make clean all
+make all
 
 echo ""
 echo "Build successful."

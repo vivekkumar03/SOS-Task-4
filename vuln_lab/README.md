@@ -1,17 +1,20 @@
-# Intentionally vulnerable teaching lab — DO NOT USE FOR REAL DATA
+# AES-256-GCM Teaching Utility
 
-This directory is a separate teaching copy. The original files in the parent directory are the reference implementation. Build only in an isolated lab environment:
+This directory contains a small password-based encryption/decryption example. It is intended for coursework, not production use; it has not undergone a security audit. Build with:
+
+For a beginner-friendly explanation of the cryptography and each source file, see [GUIDE.md](GUIDE.md).
 
 ```sh
-make clean all
+make all
 ```
 
-## Student tasks
-1. Compare this version with the parent directory's reference sources.
-2. Run a normal encrypt/decrypt round trip.
-3. Flip a character in `text.ct` and observe whether the decoder rejects tampering.
-4. Try a short/malformed Base64 input under AddressSanitizer.
-5. Review the key-derivation cost and repeated-encryption behavior.
+`make clean` removes the generated ciphertext file `text.ct` in addition to build outputs.
+
+## Checks
+1. Run an encrypt/decrypt round trip.
+2. Modify `text.ct` and verify that decryption rejects the altered data.
+3. Try short and malformed Base64 inputs under AddressSanitizer.
+4. Encrypt the same message more than once and verify that the output differs.
 
 Example instrumented build (GCC/Clang):
 
@@ -20,4 +23,4 @@ make clean
 make CFLAGS='-Wall -Wextra -Wpedantic -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -std=c11' LDFLAGS='-lssl -lcrypto -fsanitize=address,undefined'
 ```
 
-These faults are intentionally included for controlled education. Never use this directory with confidential data or deploy its binaries.
+The implementation is still a teaching example and should not be used to protect production data.

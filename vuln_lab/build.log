@@ -1,0 +1,3 @@
+gcc -Wall -Wextra -Wpedantic -O2 -std=c11 -I/opt/homebrew/opt/openssl@3/include -c crypto_common.c -o crypto_common.o
+gcc -Wall -Wextra -Wpedantic -O2 -std=c11 -I/opt/homebrew/opt/openssl@3/include task41enc.c crypto_common.o -o task41enc -L/opt/homebrew/opt/openssl@3/lib -Wl,-rpath,/opt/homebrew/opt/openssl@3/lib -lssl -lcrypto
+gcc -Wall -Wextra -Wpedantic -O2 -std=c11 -I/opt/homebrew/opt/openssl@3/include task41dec.c crypto_common.o -o task41dec -L/opt/homebrew/opt/openssl@3/lib -Wl,-rpath,/opt/homebrew/opt/openssl@3/lib -lssl -lcrypto

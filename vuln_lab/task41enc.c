@@ -16,7 +16,9 @@
  * Compile: see Makefile or build.sh
  */
 
+#define _POSIX_C_SOURCE 200809L
 #include "crypto_common.h"
+#include <unistd.h>
 
 int main(void)
 {
@@ -36,33 +38,51 @@ int main(void)
     int            final_len   = 0;
     size_t         msg_len;
     size_t         total_len;
+    int            input_char;
+    int            message_too_long = 0;
+    int            output_fd = -1;
+    int            temp_created = 0;
+    int            write_failed = 0;
+    int            exit_code = EXIT_FAILURE;
+    const char    *error_message = NULL;
+    char           temp_path[] = OUTPUT_FILE ".XXXXXX";
 
     /* ── (1) Read plaintext message ──────────────────────────────────────── */
     printf("Enter message to encrypt: ");
     fflush(stdout);
-    if (!fgets(message, sizeof(message), stdin))
-        crypto_error("Failed to read message");
-
-    msg_len = strlen(message);
-    if (msg_len > 0 && message[msg_len - 1] == '\n') {
-        message[--msg_len] = '\0';
+    msg_len = 0;
+    while ((input_char = getchar()) != EOF && input_char != '\n') {
+        if (input_char == '\0' || msg_len + 1 >= sizeof(message)) {
+            message_too_long = 1;
+            continue;
+        }
+        message[msg_len++] = (char)input_char;
     }
-    if (msg_len == 0)
-        crypto_error("Empty message – nothing to encrypt");
+    message[msg_len] = '\0';
+    if (ferror(stdin) || (input_char == EOF && msg_len == 0)) {
+        error_message = "Failed to read message";
+        goto cleanup;
+    }
+    if (message_too_long) {
+        error_message = "Message is too long or contains a NUL byte";
+        goto cleanup;
+    }
+    if (msg_len == 0) {
+        error_message = "Empty message – nothing to encrypt";
+        goto cleanup;
+    }
 
     /* ── (1.2) Read password ─────────────────────────────────────────────── */
-    if (read_password("Enter password: ", password, sizeof(password)) <= 0)
-        crypto_error("Empty or unreadable password");
+    if (read_password("Enter password: ", password, sizeof(password)) <= 0) {
+        error_message = "Empty, overlong, or unreadable password";
+        goto cleanup;
+    }
 
     /* ── Generate random salt and IV ─────────────────────────────────────── */
-    /*
-     * RAND_bytes() uses the OS entropy source (e.g. /dev/urandom on Linux).
-     * Reference: OpenSSL man page RAND_bytes(3)
-     */
-    /* LAB FLAW: fixed salt and IV make repeated encryptions deterministic;
-       reusing a GCM IV with the same key compromises security. */
-    memset(salt, 0x41, SALT_LEN);
-    memset(iv,   0x42, IV_LEN);
+    if (RAND_bytes(salt, SALT_LEN) != 1 || RAND_bytes(iv, IV_LEN) != 1) {
+        error_message = "Cryptographic random generation failed";
+        goto cleanup;
+    }
 
     /* ── Derive AES-256 key via PBKDF2-HMAC-SHA256 ──────────────────────── */
     /*
@@ -72,8 +92,10 @@ int main(void)
     kdf_fn_t kdf = derive_key;
     if (kdf(password, (int)strlen(password),
             salt, SALT_LEN,
-            key, KEY_LEN) != 1)
-        crypto_error("PBKDF2 key derivation failed");
+            key, KEY_LEN) != 1) {
+        error_message = "PBKDF2 key derivation failed";
+        goto cleanup;
+    }
 
     /* ── AES-256-GCM encryption ──────────────────────────────────────────── */
     /*
@@ -82,38 +104,54 @@ int main(void)
      * Reference: OpenSSL man page EVP_EncryptInit(3)
      */
     ciphertext = malloc(msg_len + EVP_MAX_BLOCK_LENGTH);
-    if (!ciphertext)
-        crypto_error("malloc failed for ciphertext buffer");
+    if (!ciphertext) {
+        error_message = "malloc failed for ciphertext buffer";
+        goto cleanup;
+    }
 
     ctx = EVP_CIPHER_CTX_new();
-    if (!ctx)
-        crypto_error("EVP_CIPHER_CTX_new failed");
+    if (!ctx) {
+        error_message = "EVP_CIPHER_CTX_new failed";
+        goto cleanup;
+    }
 
     /* Step 1: select cipher, no key/IV yet */
-    if (EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, NULL, NULL) != 1)
-        crypto_error("EVP_EncryptInit_ex (cipher selection) failed");
+    if (EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, NULL, NULL) != 1) {
+        error_message = "EVP_EncryptInit_ex (cipher selection) failed";
+        goto cleanup;
+    }
 
     /* Step 2: set custom IV length (12 bytes is NIST-recommended for GCM) */
-    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, IV_LEN, NULL) != 1)
-        crypto_error("Setting GCM IV length failed");
+    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, IV_LEN, NULL) != 1) {
+        error_message = "Setting GCM IV length failed";
+        goto cleanup;
+    }
 
     /* Step 3: supply key and IV */
-    if (EVP_EncryptInit_ex(ctx, NULL, NULL, key, iv) != 1)
-        crypto_error("EVP_EncryptInit_ex (key+IV) failed");
+    if (EVP_EncryptInit_ex(ctx, NULL, NULL, key, iv) != 1) {
+        error_message = "EVP_EncryptInit_ex (key+IV) failed";
+        goto cleanup;
+    }
 
     /* Step 4: encrypt plaintext */
     if (EVP_EncryptUpdate(ctx, ciphertext, &ct_len,
-                          (const unsigned char *)message, (int)msg_len) != 1)
-        crypto_error("EVP_EncryptUpdate failed");
+                          (const unsigned char *)message, (int)msg_len) != 1) {
+        error_message = "EVP_EncryptUpdate failed";
+        goto cleanup;
+    }
 
     /* Step 5: finalize (flushes any buffered data; 0 extra bytes for GCM) */
-    if (EVP_EncryptFinal_ex(ctx, ciphertext + ct_len, &final_len) != 1)
-        crypto_error("EVP_EncryptFinal_ex failed");
+    if (EVP_EncryptFinal_ex(ctx, ciphertext + ct_len, &final_len) != 1) {
+        error_message = "EVP_EncryptFinal_ex failed";
+        goto cleanup;
+    }
     ct_len += final_len;
 
     /* Step 6: retrieve the GCM authentication tag */
-    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, TAG_LEN, tag) != 1)
-        crypto_error("Retrieving GCM tag failed");
+    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, TAG_LEN, tag) != 1) {
+        error_message = "Retrieving GCM tag failed";
+        goto cleanup;
+    }
 
     EVP_CIPHER_CTX_free(ctx);
     ctx = NULL;
@@ -121,8 +159,10 @@ int main(void)
     /* ── Assemble binary blob: [salt | IV | tag | ciphertext] ───────────── */
     total_len = SALT_LEN + IV_LEN + TAG_LEN + (size_t)ct_len;
     file_buf  = malloc(total_len);
-    if (!file_buf)
-        crypto_error("malloc failed for file buffer");
+    if (!file_buf) {
+        error_message = "malloc failed for file buffer";
+        goto cleanup;
+    }
 
     memcpy(file_buf,                              salt,       SALT_LEN);
     memcpy(file_buf + SALT_LEN,                   iv,         IV_LEN);
@@ -131,14 +171,40 @@ int main(void)
 
     /* ── Base64-encode and write to OUTPUT_FILE ──────────────────────────── */
     b64_output = base64_encode(file_buf, total_len);
+    if (!b64_output) {
+        error_message = "Base64 encoding failed";
+        goto cleanup;
+    }
 
-    fp = fopen(OUTPUT_FILE, "w");
-    if (!fp)
-        crypto_error("Failed to open " OUTPUT_FILE " for writing");
-
-    fprintf(fp, "%s\n", b64_output);
-    fclose(fp);
+    output_fd = mkstemp(temp_path);
+    if (output_fd < 0) {
+        error_message = "Failed to open temporary ciphertext file";
+        goto cleanup;
+    }
+    temp_created = 1;
+    fp = fdopen(output_fd, "w");
+    if (!fp) {
+        close(output_fd);
+        output_fd = -1;
+        error_message = "Failed to open temporary ciphertext stream";
+        goto cleanup;
+    }
+    output_fd = -1;
+    write_failed = fprintf(fp, "%s\n", b64_output) < 0;
+    if (fflush(fp) != 0 || fsync(fileno(fp)) != 0)
+        write_failed = 1;
+    if (fclose(fp) != 0)
+        write_failed = 1;
     fp = NULL;
+    if (write_failed) {
+        error_message = "Failed to write ciphertext";
+        goto cleanup;
+    }
+    if (rename(temp_path, OUTPUT_FILE) != 0) {
+        error_message = "Failed to replace " OUTPUT_FILE;
+        goto cleanup;
+    }
+    temp_created = 0;
 
     printf("Encrypted message written to " OUTPUT_FILE "\n");
     printf("  Salt length : %d bytes\n",   SALT_LEN);
@@ -147,19 +213,27 @@ int main(void)
     printf("  Ciphertext  : %d bytes\n",   ct_len);
     printf("  PBKDF2 iter : %d\n",         PBKDF2_ITER);
 
-    /* ── Cleanup: free memory and erase sensitive data ───────────────────── */
-    /*
-     * OPENSSL_cleanse() is guaranteed not to be optimised away by the compiler
-     * (unlike memset), making it safe for clearing cryptographic material.
-     * Reference: OpenSSL man page OPENSSL_cleanse(3)
-     */
+    exit_code = EXIT_SUCCESS;
+
+cleanup:
+    if (fp)
+        fclose(fp);
+    if (output_fd >= 0)
+        close(output_fd);
+    if (temp_created)
+        unlink(temp_path);
+    EVP_CIPHER_CTX_free(ctx);
     OPENSSL_cleanse(key,      KEY_LEN);
     OPENSSL_cleanse(password, MAX_PASS_LEN);
     OPENSSL_cleanse(message,  MAX_MSG_LEN);
     OPENSSL_cleanse(tag,      TAG_LEN);
+    if (file_buf)
+        OPENSSL_cleanse(file_buf, total_len);
     free(ciphertext);
     free(file_buf);
     free(b64_output);
 
-    return EXIT_SUCCESS;
+    if (error_message)
+        fprintf(stderr, "Error: %s\n", error_message);
+    return exit_code;
 }

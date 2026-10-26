@@ -10,6 +10,7 @@
  */
 
 #include "crypto_common.h"
+#include <limits.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -54,70 +55,105 @@ int derive_key(const char *password, int pass_len,
  */
 char *base64_encode(const unsigned char *input, size_t len)
 {
-    BIO     *b64 = BIO_new(BIO_f_base64());
-    BIO     *mem = BIO_new(BIO_s_mem());
+    BIO     *b64 = NULL;
+    BIO     *mem = NULL;
     BUF_MEM *bptr;
     char    *result;
+    int      pushed = 0;
 
+    if ((!input && len != 0) || len > INT_MAX)
+        return NULL;
+
+    b64 = BIO_new(BIO_f_base64());
+    mem = BIO_new(BIO_s_mem());
     if (!b64 || !mem)
-        crypto_error("BIO allocation failed in base64_encode");
+        goto error;
 
-    b64 = BIO_push(b64, mem);
+    if (!BIO_push(b64, mem))
+        goto error;
+    pushed = 1;
     BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
 
     if (BIO_write(b64, input, (int)len) <= 0)
-        crypto_error("BIO_write failed in base64_encode");
+        goto error;
     if (BIO_flush(b64) != 1)
-        crypto_error("BIO_flush failed in base64_encode");
+        goto error;
 
-    BIO_get_mem_ptr(b64, &bptr);
+    if (BIO_get_mem_ptr(b64, &bptr) <= 0 || !bptr)
+        goto error;
 
     result = malloc(bptr->length + 1);
     if (!result)
-        crypto_error("malloc failed in base64_encode");
+        goto error;
 
     memcpy(result, bptr->data, bptr->length);
     result[bptr->length] = '\0';
 
     BIO_free_all(b64);   /* frees the whole chain including mem */
     return result;
+
+error:
+    if (pushed)
+        BIO_free_all(b64);
+    else {
+        BIO_free(b64);
+        BIO_free(mem);
+    }
+    return NULL;
 }
 
 /*
  * base64_decode
  *
- * Uses an OpenSSL BIO chain (BIO_f_base64 → BIO_s_mem).
- * The raw input length is a safe upper bound for the decoded buffer.
+ * Validates the alphabet and padding before decoding with EVP_DecodeBlock.
  *
  * Reference: OpenSSL man page BIO_f_base64(3)
  */
 unsigned char *base64_decode(const char *input, size_t *out_len)
 {
-    size_t        in_len = strlen(input);
-    BIO          *b64    = BIO_new(BIO_f_base64());
-    BIO          *mem    = BIO_new_mem_buf(input, (int)in_len);
+    size_t        in_len;
+    size_t        padding = 0;
+    size_t        i;
     unsigned char *result;
     int            decoded;
 
-    if (!b64 || !mem)
-        crypto_error("BIO allocation failed in base64_decode");
+    if (!input || !out_len)
+        return NULL;
+    *out_len = 0;
 
-    b64 = BIO_push(b64, mem);
-    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
+    in_len = strlen(input);
+    if (in_len == 0 || in_len % 4 != 0 || in_len > INT_MAX)
+        return NULL;
 
-    result = malloc(in_len); /* upper bound: base64 expands by ~4/3 */
+    for (i = 0; i < in_len; i++) {
+        unsigned char ch = (unsigned char)input[i];
+        int is_alphabet = (ch >= 'A' && ch <= 'Z') ||
+                          (ch >= 'a' && ch <= 'z') ||
+                          (ch >= '0' && ch <= '9') || ch == '+' || ch == '/';
+
+        if (is_alphabet) {
+            if (padding != 0)
+                return NULL;
+        } else if (ch == '=' && i >= in_len - 2) {
+            padding++;
+        } else {
+            return NULL;
+        }
+    }
+    if (padding > 2 || (padding == 2 && input[in_len - 2] != '='))
+        return NULL;
+
+    result = malloc((in_len / 4) * 3);
     if (!result)
-        crypto_error("malloc failed in base64_decode");
+        return NULL;
 
-    decoded = BIO_read(b64, result, (int)in_len);
+    decoded = EVP_DecodeBlock(result, (const unsigned char *)input, (int)in_len);
     if (decoded < 0) {
         free(result);
-        BIO_free_all(b64);
-        crypto_error("BIO_read failed in base64_decode");
+        return NULL;
     }
 
-    *out_len = (size_t)decoded;
-    BIO_free_all(b64);
+    *out_len = (size_t)decoded - padding;
     return result;
 }
 
@@ -134,8 +170,15 @@ unsigned char *base64_decode(const char *input, size_t *out_len)
 int read_password(const char *prompt, char *buf, size_t buf_len)
 {
     struct termios oldt, newt;
-    size_t         len;
+    size_t         len = 0;
+    int            ch;
+    int            got_input = 0;
+    int            invalid = 0;
+    int            read_error = 0;
     int            is_tty = isatty(STDIN_FILENO);
+
+    if (!buf || buf_len == 0 || buf_len > INT_MAX)
+        return -1;
 
     printf("%s", prompt);
     fflush(stdout);
@@ -150,21 +193,27 @@ int read_password(const char *prompt, char *buf, size_t buf_len)
             return -1;
     }
 
-    if (!fgets(buf, (int)buf_len, stdin)) {
-        if (is_tty)
-            tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-        return -1;
+    while ((ch = getchar()) != EOF && ch != '\n') {
+        got_input = 1;
+        if (ch == '\0' || len + 1 >= buf_len) {
+            invalid = 1;
+            continue;
+        }
+        buf[len++] = (char)ch;
     }
+    buf[len] = '\0';
+    if (ferror(stdin) || (!got_input && ch == EOF))
+        read_error = 1;
 
     if (is_tty) {
-        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+        if (tcsetattr(STDIN_FILENO, TCSANOW, &oldt) != 0)
+            read_error = 1;
         printf("\n");   /* newline after the hidden input */
     }
 
-    /* Strip trailing newline */
-    len = strlen(buf);
-    if (len > 0 && buf[len - 1] == '\n') {
-        buf[--len] = '\0';
+    if (invalid || read_error) {
+        OPENSSL_cleanse(buf, buf_len);
+        return -1;
     }
 
     return (int)len;

@@ -7,9 +7,11 @@
 #   make          – build both programs (default)
 #   make clean    – remove object files, binaries, and text.ct
 
+OPENSSL_PREFIX := $(shell brew --prefix openssl@3)
+
 CC       = gcc
-CFLAGS   = -Wall -Wextra -Wpedantic -O2 -std=c11
-LDFLAGS  = -lssl -lcrypto
+CFLAGS   = -Wall -Wextra -Wpedantic -O2 -std=c11 -I$(OPENSSL_PREFIX)/include
+LDFLAGS  = -L$(OPENSSL_PREFIX)/lib -Wl,-rpath,$(OPENSSL_PREFIX)/lib -lssl -lcrypto
 
 COMMON_SRC = crypto_common.c
 COMMON_OBJ = crypto_common.o
