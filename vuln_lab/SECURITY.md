@@ -103,7 +103,6 @@ The following checks passed for this implementation:
 - AddressSanitizer and UndefinedBehaviorSanitizer runs covering round-trip, authentication failure, malformed Base64, short and oversized files, and overlong input. No memory-safety or undefined-behavior reports occurred.
 - OpenSSL 3 command-line PBKDF2-HMAC-SHA256 known-vector verification and AES-256-GCM algorithm availability.
 
-Leak detection was disabled because the macOS sanitizer runtime reports it is unsupported. The OpenSSL `enc` command does not support AEAD/GCM operations, so it could not independently decrypt this program's ciphertext. These tests provide useful coverage but do not replace an independent security audit.
 
 ## Compatibility and Remaining Considerations
 
