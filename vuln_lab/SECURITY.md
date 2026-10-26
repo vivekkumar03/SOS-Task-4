@@ -17,30 +17,30 @@ The CVEs below are real examples from other products. They illustrate the CWE ca
 | **CWE-476: NULL Pointer Dereference** | [CVE-2022-40476](https://nvd.nist.gov/vuln/detail/CVE-2022-40476), a Linux kernel `io_uring` null-pointer dereference | The earlier Base64 encoder did not check the result of `BIO_get_mem_ptr` before dereferencing its output. This was a defensive error-handling gap, not a demonstrated normal-operation null-pointer failure. **Fixed:** the return value and pointer are now checked before use. The CVE is an external category example, not a finding against this code. |
 | **CWE-457: Use of Uninitialized Variable** | [CVE-2026-11137](https://nvd.nist.gov/vuln/detail/CVE-2026-11137), an uninitialized-use information disclosure in Google Chrome's ANGLE component | No direct use of an uninitialized variable was identified in this project. The cited Chrome issue is unrelated to this code and is included only as an example of CWE-457. |
 
-## Findings
+## Historical Findings (All Fixed)
 
-### 1. GCM Authentication Result Was Ignored
+### 1. GCM Authentication Result Was Ignored (Fixed)
 
 - **CWE:** CWE-354, Improper Validation of Integrity Check Value
 - **CVE:** None assigned
 - **Impact:** The decryptor ignored the return value from `EVP_DecryptFinal_ex`. A wrong password or modified ciphertext could therefore result in unauthenticated plaintext being printed as if decryption succeeded.
 - **Fix applied:** Decryption now stops when tag verification fails, cleanses the allocated plaintext and key material, and reports an authentication error. Plaintext is only printed after successful verification.
 
-### 2. GCM Nonce and KDF Salt Were Fixed
+### 2. GCM Nonce and KDF Salt Were Fixed (Fixed)
 
 - **CWE:** CWE-323, Reusing a Nonce, Key Pair in Encryption; CWE-760, Use of a One-Way Hash with a Predictable Salt
 - **CVE:** None assigned
 - **Impact:** Every encryption reused the same IV and salt. For the same password, this reused the AES-GCM key/nonce pair, which can compromise confidentiality and authentication. A fixed salt also made key derivation deterministic for a given password.
 - **Fix applied:** The encryptor now obtains a fresh salt and IV from OpenSSL's cryptographic random generator and fails closed if random generation fails.
 
-### 3. PBKDF2 Used an Insufficient Work Factor
+### 3. PBKDF2 Used an Insufficient Work Factor (Fixed)
 
 - **CWE:** CWE-916, Use of Password Hash With Insufficient Computational Effort
 - **CVE:** None assigned
 - **Impact:** One PBKDF2 iteration made offline password guessing against captured ciphertext unnecessarily cheap.
 - **Fix applied:** PBKDF2-HMAC-SHA256 now uses 600,000 iterations, increasing the cost of each password guess.
 
-### 4. Malformed Ciphertext Lengths Could Cause Invalid Memory Access
+### 4. Malformed Ciphertext Lengths Could Cause Invalid Memory Access (Fixed)
 
 - **CWE:** CWE-20, Improper Input Validation; CWE-191, Integer Underflow; CWE-125, Out-of-bounds Read
 - **CVE:** None assigned
@@ -54,21 +54,21 @@ The CVEs below are real examples from other products. They illustrate the CWE ca
 - **Impact:** The decryptor allocated memory based on the entire input file size before imposing a limit. An oversized file could exhaust process memory. The original code also narrowed file-derived lengths to `int` without first constraining them.
 - **Fix applied:** File seeking and size determination are checked, the encoded input is capped before allocation, and decoded ciphertext is limited to the application maximum. These bounds also keep lengths passed to OpenSSL within the supported integer range.
 
-### 6. Base64 and Embedded-NUL Input Was Not Strictly Validated
+### 6. Base64 and Embedded-NUL Input Was Not Strictly Validated (Fixed)
 
 - **CWE:** CWE-20, Improper Input Validation
 - **CVE:** None assigned
 - **Impact:** The BIO-based decoder did not explicitly validate the complete Base64 alphabet, padding, or the raw file for embedded NUL bytes. NUL termination could cause parsing to stop before the end of the file, allowing trailing bytes to be ignored.
 - **Fix applied:** The decoder now checks Base64 length, alphabet, and padding before decoding with `EVP_DecodeBlock`. The file reader rejects embedded NUL bytes, and decoded lengths are validated before use.
 
-### 7. Message and Password Inputs Could Be Silently Truncated
+### 7. Message and Password Inputs Could Be Silently Truncated (Fixed)
 
 - **CWE:** CWE-20, Improper Input Validation
 - **CVE:** None assigned
 - **Impact:** The previous bounded input handling could silently accept only a prefix of an overlong line. Embedded NUL bytes in message input could also make string-length handling truncate the message.
 - **Fix applied:** Message and password lines are read with explicit bounds. Overlong input and NUL-containing input are rejected rather than silently truncated; the password reader consumes the remainder of an overlong line and cleanses the rejected buffer.
 
-### 8. Ciphertext Output Could Follow a Symlink
+### 8. Ciphertext Output Could Follow a Symlink (Fixed)
 
 - **CWE:** CWE-59, Improper Link Resolution Before File Access
 - **CVE:** None assigned
@@ -92,6 +92,18 @@ The CVEs below are real examples from other products. They illustrate the CWE ca
 ## Build and Cleanup Notes
 
 `build.sh` invokes `make all` and does not require a clean build. Run it as `bash build.sh` unless the executable bit is set. `make clean` removes `text.ct` along with build artifacts, so preserve or back up generated ciphertext before using that target.
+
+## Verification
+
+The following checks passed for this implementation:
+
+- Normal encrypt/decrypt round trip, wrong-password rejection, ciphertext and tag tampering rejection, and different output for repeated encryption of the same message.
+- Rejection of empty messages and files, truncated ciphertext, malformed Base64, short decoded packages, oversized files, overlong passwords, and overlong messages.
+- Cleanup after a failed ciphertext write, including removal of the incomplete temporary file.
+- AddressSanitizer and UndefinedBehaviorSanitizer runs covering round-trip, authentication failure, malformed Base64, short and oversized files, and overlong input. No memory-safety or undefined-behavior reports occurred.
+- OpenSSL 3 command-line PBKDF2-HMAC-SHA256 known-vector verification and AES-256-GCM algorithm availability.
+
+Leak detection was disabled because the macOS sanitizer runtime reports it is unsupported. The OpenSSL `enc` command does not support AEAD/GCM operations, so it could not independently decrypt this program's ciphertext. These tests provide useful coverage but do not replace an independent security audit.
 
 ## Compatibility and Remaining Considerations
 
