@@ -3,7 +3,7 @@
 #
 # Usage: bash build.sh
 #
-# Requires: make, gcc, Homebrew OpenSSL 3
+# Requires: make, a C11 compiler, OpenSSL 3 development files
 
 set -euo pipefail
 

@@ -13,7 +13,7 @@
  *   Cipher         : AES-256-GCM         (NIST SP 800-38D)
  *
  * File layout written to text.ct (binary before base64):
- *   [SALT_LEN bytes salt][IV_LEN bytes IV][TAG_LEN bytes GCM tag][ciphertext]
+ *   [magic/version/KDF/iterations/length | salt | IV | tag | ciphertext]
  */
 
 #ifndef CRYPTO_COMMON_H
@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <openssl/bio.h>
@@ -37,15 +38,27 @@
 /* ── Application limits ───────────────────────────────────────────────────── */
 #define MAX_MSG_LEN    4096
 #define MAX_PASS_LEN   256
+#define MIN_PASS_LEN   12
+#define MAX_PASSWORD_ATTEMPTS 3
+#define PASSWORD_INVALID (-2)
 #define OUTPUT_FILE    "text.ct"
-#define HEADER_LEN     (SALT_LEN + IV_LEN + TAG_LEN)
-#define MAX_B64_LEN    (4 * ((HEADER_LEN + MAX_MSG_LEN + 2) / 3))
+#define FORMAT_MAGIC   "T41E"
+#define FORMAT_VERSION 1
+#define KDF_PBKDF2_SHA256 1
+#define MAX_PBKDF2_ITER 2000000
+#define METADATA_LEN   14
+#define AAD_LEN        (METADATA_LEN + SALT_LEN + IV_LEN)
+#define HEADER_LEN     (AAD_LEN + TAG_LEN)
+#define MAX_B64_LEN    (4 * ((HEADER_LEN + MAX_MSG_LEN - 1 + 2) / 3))
 
 /* ── Function-pointer type for the key-derivation strategy ───────────────── */
-/* Signature: (password, pass_len, salt, salt_len, out_key, key_len) -> 1 ok  */
+/* Signature includes the validated iteration count as its final argument. */
 typedef int (*kdf_fn_t)(const char *, int,
                         const unsigned char *, int,
-                        unsigned char *, int);
+                        unsigned char *, int, int);
+
+void make_header(unsigned char *header, uint32_t message_len);
+int parse_header(const unsigned char *header, size_t decoded_len, int *iterations);
 
 /* ── Prototypes ───────────────────────────────────────────────────────────── */
 
@@ -59,11 +72,12 @@ typedef int (*kdf_fn_t)(const char *, int,
  * @param salt_len  length of salt in bytes
  * @param key       output buffer (must be at least key_len bytes)
  * @param key_len   desired key length in bytes
+ * @param iterations  PBKDF2 work factor, bounded by the supported policy
  * @return          1 on success, 0 on failure (same convention as OpenSSL)
  */
 int derive_key(const char *password, int pass_len,
                const unsigned char *salt, int salt_len,
-               unsigned char *key, int key_len);
+               unsigned char *key, int key_len, int iterations);
 
 /**
  * base64_encode – encode arbitrary bytes to a NUL-terminated base64 string.
@@ -91,7 +105,7 @@ unsigned char *base64_decode(const char *input, size_t *out_len);
  * @param prompt   string printed to stdout before reading
  * @param buf      destination buffer
  * @param buf_len  size of buf (including space for NUL)
- * @return         number of characters read (>= 0), or -1 on error
+ * @return         bytes read (>= 0), -1 on I/O error, PASSWORD_INVALID on invalid input
  */
 int read_password(const char *prompt, char *buf, size_t buf_len);
 
