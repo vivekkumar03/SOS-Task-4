@@ -26,22 +26,20 @@ The implementation remains a coursework example and has not undergone an indepen
 
 The review covers [crypto_common.c](vuln_lab/crypto_common.c), [crypto_common.h](vuln_lab/crypto_common.h), [task41enc.c](vuln_lab/task41enc.c), [task41dec.c](vuln_lab/task41dec.c), and [Makefile](vuln_lab/Makefile).
 
-**Terminology:** CWE describes a weakness category. CVE identifies a particular publicly recorded vulnerability in a particular product. The CWE mappings here are review classifications, not official CVE assignments. A similar CWE does not mean this project is affected by another product's CVE.
-
 ## Findings at a Glance
 
 | ID | Historical issue | CWE mapping | Current status |
 | --- | --- | --- | --- |
-| F01 | GCM tag-verification result ignored | CWE-354 | Fixed: output follows successful authentication |
-| F02 | Constant salt and GCM nonce | CWE-323, CWE-760 | Fixed: fresh cryptographic randomness |
-| F03 | One PBKDF2 iteration | CWE-916 | Fixed: 600,000 iterations for encryption |
-| F04 | Header-length subtraction before validation | CWE-20, CWE-191, CWE-125 | Fixed: validate before pointer/length use |
-| F05 | Unbounded ciphertext-file allocation | CWE-789, CWE-400 | Fixed: encoded and decoded size caps |
-| F06 | Permissive Base64 and NUL/trailing-data handling | CWE-20 | Fixed: canonical decoding and exact framing |
-| F07 | Silent message/password truncation | CWE-20 | Fixed: drain and reject invalid lines |
-| F08 | Output path could follow a symlink | CWE-59 | Fixed: refuse symlinks and restrict file operations |
-| F09 | Ordinary error paths bypassed secret cleanup | CWE-226, CWE-459 | Fixed for ordinary returns; signal-exit exception remains |
-| F10 | Unchecked BIO memory-buffer result | CWE-252; potential CWE-476 consequence | Defensive gap closed; no exploit demonstrated |
+| F01 | GCM tag-verification result ignored | [CWE-354](https://cwe.mitre.org/data/definitions/354.html) | Fixed: output follows successful authentication |
+| F02 | Constant salt and GCM nonce | [CWE-323](https://cwe.mitre.org/data/definitions/323.html), [CWE-760](https://cwe.mitre.org/data/definitions/760.html) | Fixed: fresh cryptographic randomness |
+| F03 | One PBKDF2 iteration | [CWE-916](https://cwe.mitre.org/data/definitions/916.html) | Fixed: 600,000 iterations for encryption |
+| F04 | Header-length subtraction before validation | [CWE-20](https://cwe.mitre.org/data/definitions/20.html), [CWE-191](https://cwe.mitre.org/data/definitions/191.html), [CWE-125](https://cwe.mitre.org/data/definitions/125.html) | Fixed: validate before pointer/length use |
+| F05 | Unbounded ciphertext-file allocation | [CWE-789](https://cwe.mitre.org/data/definitions/789.html), [CWE-400](https://cwe.mitre.org/data/definitions/400.html) | Fixed: encoded and decoded size caps |
+| F06 | Permissive Base64 and NUL/trailing-data handling | [CWE-20](https://cwe.mitre.org/data/definitions/20.html) | Fixed: canonical decoding and exact framing |
+| F07 | Silent message/password truncation | [CWE-20](https://cwe.mitre.org/data/definitions/20.html) | Fixed: drain and reject invalid lines |
+| F08 | Output path could follow a symlink | [CWE-59](https://cwe.mitre.org/data/definitions/59.html) | Fixed: refuse symlinks and restrict file operations |
+| F09 | Ordinary error paths bypassed secret cleanup | [CWE-226](https://cwe.mitre.org/data/definitions/226.html), [CWE-459](https://cwe.mitre.org/data/definitions/459.html) | Fixed for ordinary returns; signal-exit exception remains |
+| F10 | Unchecked BIO memory-buffer result | [CWE-252](https://cwe.mitre.org/data/definitions/252.html); potential [CWE-476](https://cwe.mitre.org/data/definitions/476.html) consequence | Defensive gap closed; no exploit demonstrated |
 
 ## Related CWE/CVE Examples
 
@@ -165,21 +163,15 @@ Offsets refer to the decoded binary package. Base64 wraps the entire package.
 
 The first 42 bytes are AAD. The file must contain exactly the length recorded in the header, plus the 58-byte overhead. The encoder writes one final LF; the decoder accepts no line ending, one LF, or one CRLF.
 
-## Build and Cleanup Notes
-
-`build.sh` invokes `make all` and does not require a clean build. Run it as `bash build.sh` unless the executable bit is set. `make clean` removes `text.ct` along with build artifacts, so preserve or back up generated ciphertext before using that target.
-
-The Makefile uses `pkg-config` for `libcrypto` when available, Homebrew OpenSSL 3 as a macOS fallback, or system include/library paths otherwise. `CC`, `CFLAGS`, `CPPFLAGS`, `LDFLAGS`, `LDLIBS`, `OPENSSL_PREFIX`, and `HARDEN_*` variables can be overridden. The supported platform model is POSIX macOS/Linux, not native Windows.
-
 ## Verification
 
 The detailed case inventory, expected outcomes, revision scope and verification limits are recorded in [TEST_CASES.md](TEST_CASES.md).
 
-Recorded runs were performed on macOS using Apple Clang and Homebrew OpenSSL 3. Tests used temporary directories rather than replacing repository ciphertext. Earlier headerless-format tests and the later version-1 checks are distinguished below.
+Recorded runs were performed on macOS using Apple Clang and Homebrew OpenSSL 3. Tests used temporary directories rather than replacing repository ciphertext. Earlier tests of the headerless format and later tests of the final implementation are distinguished below.
 
 | Test group | Recorded outcome | Evidence scope |
 | --- | --- | --- |
-| Round trip and wrong password | Passed | Version 1 recovers the message; wrong password fails authentication |
+| Round trip and wrong password | Passed | The final implementation recovers the message; wrong password fails authentication |
 | Header, salt, IV, tag and ciphertext tampering | Passed | Altered fields rejected; no decrypted-message output |
 | Repeated encryption | Passed | Same message/password produced different encrypted files; not a statistical randomness test |
 | Empty, short, truncated, malformed and oversized files | Passed | Input rejected before unsafe use |
@@ -190,7 +182,7 @@ Recorded runs were performed on macOS using Apple Clang and Homebrew OpenSSL 3. 
 | Overwrite and filesystem checks | Passed | Approval/denial, unattended refusal, symlink/FIFO rejection and `0600` permissions checked |
 | Output races and cleanup | Passed | Newly appearing output and changed confirmed inode preserved; temporary output removed |
 | Terminal restoration | Passed | Pseudo-terminal tests for all five handled signals |
-| ASan and UBSan | No findings in exercised paths | Version-1 round trip, wrong password, 20 malformed/tampered file cases, weak/overlong/NUL input |
+| ASan and UBSan | No findings in exercised paths | Final implementation round trip, wrong password, 20 malformed/tampered file cases, weak/overlong/NUL input |
 | OpenSSL CLI | Partial independent check | Earlier PBKDF2 known vector and GCM algorithm availability; not application-output interoperability |
 | Hardened macOS build | Passed | Build and PIE executable flag checked |
 | Linux portability | Dry run only | Recipe inspected; no Linux compilation or execution |

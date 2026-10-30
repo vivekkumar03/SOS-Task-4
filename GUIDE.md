@@ -6,17 +6,6 @@ This guide follows one message from keyboard input to an encrypted file and back
 
 > This is a coursework example, not a production security product. No independent audit has been performed.
 
-## Presentation Overview
-
-| Topic | Main takeaway |
-| --- | --- |
-| What the program protects | The message, using a key derived from a password |
-| How secrecy works | AES-256-GCM encrypts the message |
-| How changes are detected | GCM authenticates both ciphertext and readable header data |
-| Why input checks matter | Even good cryptography fails when parsing, file access or error handling is unsafe |
-| How improvements are described | CWE names a weakness category; a CVE names a specific published vulnerability |
-| What testing establishes | Selected paths work as expected; testing does not prove complete security |
-
 ## The Basic Idea
 
 Encryption turns readable information, called **plaintext**, into unreadable-looking information, called **ciphertext**. A **password** is used to make a cryptographic key. The key encrypts and later decrypts the message.
@@ -86,20 +75,6 @@ The binary data stored before Base64 encoding has this layout:
 The salt, IV, tag, and ciphertext are all stored together. None of these fields is a substitute for the password: keep the password private and choose a strong one.
 
 The first 42 bytes (metadata, salt, and IV) are supplied to GCM as **additional authenticated data (AAD)**. This data is readable, but changing it makes authentication fail. The tag starts at byte offset 42 and ciphertext starts at offset 58. The decoder bounds the iteration count to 600,000 through 2,000,000 before doing that much work; the header is only trusted after GCM verifies it.
-
-## Important Terms
-
-| Term | Plain-language meaning | Secret? |
-| --- | --- | --- |
-| Plaintext | The original readable message | Yes, in this example |
-| Ciphertext | The encrypted message bytes | May be stored or shared |
-| Password | The user's input used to derive a key | Yes |
-| Key | The 32 secret bytes used by AES-256 | Yes |
-| Salt | Random bytes used by PBKDF2 to vary the derived key | No |
-| IV / nonce | Per-encryption GCM input that must not repeat with the same key | No |
-| Tag | The GCM integrity check verified before plaintext output | No |
-| AAD | Readable data protected against modification by the GCM tag | No |
-| Base64 | A printable representation of bytes, not encryption | No protection of its own |
 
 **PBKDF2-HMAC-SHA256** expands to a password-based key derivation function using HMAC with SHA-256. Here it performs 600,000 iterations to make each password guess cost more work. It does not prevent offline guesses or rescue an easily guessed password.
 
@@ -205,25 +180,6 @@ cd vuln_lab
 
 The script calls `make all`; it does not clean first. `make clean` removes the object file, both programs, and `text.ct`, so do not use that target if you need to keep the generated ciphertext. PIE randomization support and stack protection are additional defenses, not substitutes for correct bounds checks and authentication.
 
-## CWE Lessons
-
-CWE means **Common Weakness Enumeration**: a vocabulary for describing classes of software weakness. The table connects the code to security concepts; it does not assign a CVE to this project.
-
-| Lesson | CWE | How this code addresses it |
-| --- | --- | --- |
-| Never display unverified plaintext | CWE-354: Improper Validation of Integrity Check Value | Check the GCM tag and authenticate the header |
-| Never reuse a GCM nonce with the same key | CWE-323: Reusing a Nonce, Key Pair in Encryption | Generate a fresh random IV |
-| Avoid predictable password-derivation salts | CWE-760: Use of a One-Way Hash with a Predictable Salt | Generate a fresh random salt |
-| Make password guesses expensive | CWE-916: Insufficient Computational Effort | Use PBKDF2 with 600,000 iterations |
-| Require more than a very short password | CWE-521: Weak Password Requirements | Enforce a 12-byte minimum for encryption; strength is still the user's responsibility |
-| Validate lengths before using memory | CWE-20, CWE-191, CWE-125 | Check inputs before subtraction and pointer access |
-| Bound untrusted memory and CPU work | CWE-789, CWE-400 | Limit file size and stored KDF iterations |
-| Do not silently accept partial or ambiguous input | CWE-20: Improper Input Validation | Reject overlong lines and noncanonical Base64 |
-| Avoid following unexpected links | CWE-59: Improper Link Resolution | Refuse symlinks and check regular files |
-| Clean secrets and check API failures | CWE-226, CWE-459, CWE-252 | Shared cleanup paths and checked BIO results |
-
-CWE-120 (unchecked-copy overflow) and CWE-457 (uninitialized-variable use) were not identified in this review. A possible null-pointer consequence (CWE-476) motivated a defensive BIO-result check; no exploit was demonstrated. External CVE examples and detailed classifications are in [SECURITY.md](SECURITY.md).
-
 ## Safe Demonstration
 
 Run the following from the workspace root to build the tools and create an isolated demonstration directory. Existing repository ciphertext is not used or overwritten.
@@ -251,17 +207,6 @@ Use a nonempty demonstration message and a disposable passphrase of at least 12 
 | Change the tag or ciphertext bytes | Authentication failure, or parsing failure if the format was damaged |
 
 Repeated encryption with the same message/password produces different files because salt and IV change. The recorded test suite also exercised malformed files, canonical padding, size limits, file races, terminal signals, and selected ASan/UBSan paths. Linux received a build-recipe dry run only; testing limits are listed in the [verification section](SECURITY.md#verification).
-
-## Security and Compatibility Notes
-
-- A longer, hard-to-guess password is important. PBKDF2 slows guesses; it cannot make a weak password strong.
-- The three-attempt limit applies only to the current process. Restarting resets it, and it does not prevent offline guesses against a copied file.
-- Salt, IV, ciphertext, and tag are stored together and are not secret. Do not store the password alongside `text.ct`.
-- All earlier headerless ciphertext is incompatible with this version. Back up old files and use the matching old decoder in isolation before re-encrypting. There is no automatic migration or fallback.
-- Version 1 records the format and KDF settings and authenticates them with AAD. Unsupported versions are rejected rather than guessed.
-- Use a private working directory. `O_NOFOLLOW` checks only the last input path component; confirmed replacement still has a check/rename race if another user can change the directory (CWE-367).
-- Signal handlers attempt to restore terminal settings but skip normal secret cleanup. Uncatchable signals and abrupt failures remain limitations.
-- This example prints decrypted data to the terminal and does not provide a production key-management system, backup policy, or independent security review.
 
 ## Closing Summary
 
