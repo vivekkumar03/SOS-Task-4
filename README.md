@@ -1,27 +1,51 @@
-# AES-256-GCM Teaching Utility
+# SOS Assignment Task 4 -Encryption Decryption
 
-This directory contains a small password-based encryption/decryption example. It is intended for coursework, not production use; it has not undergone a security audit. Build with:
+This is a portable C source handoff for macOS and Linux. Each system must compile its own binaries; do not distribute a binary built on a different operating system. This coursework example has not undergone an independent security audit and is not for production data.
 
-For a beginner-friendly explanation of the cryptography and each source file, see [GUIDE.md](GUIDE.md).
+## Prerequisites
 
-```sh
-make -C vuln_lab all
-```
+Install a C11 compiler, `make`, `pkg-config`, and OpenSSL 3 development files.
 
-New passwords must be at least 12 bytes. Existing output requires confirmation on a terminal; symlinks are refused. The new authenticated version-1 format is not compatible with older headerless ciphertext. See [SECURITY.md](SECURITY.md) for the format and limits.
-
-`make -C vuln_lab clean` removes the generated ciphertext file `text.ct` in addition to build outputs.
-
-## Checks
-1. Run an encrypt/decrypt round trip.
-2. Modify `text.ct` and verify that decryption rejects the altered data.
-3. Try short and malformed Base64 inputs under AddressSanitizer.
-4. Encrypt the same message more than once and verify that the output differs.
-
-Example instrumented build (GCC/Clang):
+On macOS with Homebrew:
 
 ```sh
-make -C vuln_lab -B CFLAGS='-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer' LDFLAGS='-fsanitize=address,undefined'
+xcode-select --install
+brew install openssl@3 pkg-config
 ```
 
-The implementation is still a teaching example and should not be used to protect production data.
+On Debian/Ubuntu Linux:
+
+```sh
+sudo apt update
+sudo apt install build-essential pkg-config libssl-dev
+```
+
+The OpenSSL development package should provide OpenSSL 3. If a Linux distribution supplies an older OpenSSL version, use its OpenSSL 3 development package or a supported distribution release.
+
+## Build and Run
+
+```sh
+cd vuln_lab
+./build.sh
+./task41enc
+./task41dec
+```
+
+The Makefile uses `pkg-config` when available, Homebrew OpenSSL 3 as a macOS fallback, and system paths otherwise. `build.sh` changes to its own directory, so it can also be run by path from another working directory. Running `make clean` deletes `text.ct` as well as the binaries and object file; back up ciphertext before using it.
+
+New encryption requires a password of 12 to 255 bytes and asks for confirmation. Password entry can be retried up to three times. Existing output requires confirmation in an interactive terminal; symlinks are refused. The version-1 authenticated file format is incompatible with prior headerless ciphertext.
+
+## Handoff Contents
+
+Share the source and documentation, not locally built artifacts. Include:
+
+- `vuln_lab/` C sources, header, `Makefile`, and executable `build.sh`
+- `README.md`, `GUIDE.md`, `SECURITY.md`, and `TEST_CASES.md`
+
+Do not include `task41enc`, `task41dec`, `crypto_common.o`, `build.log`, `.DS_Store`, or `text.ct`. Those are local build outputs, metadata, logs, or generated ciphertext. The recipient should build locally with the instructions above.
+
+## Documentation
+
+- [GUIDE.md](GUIDE.md): beginner explanation and source walkthrough.
+- [SECURITY.md](SECURITY.md): CWE mappings, remediations, security limits, and verification summary.
+- [TEST_CASES.md](TEST_CASES.md): test-case inventory and recorded outcomes.
