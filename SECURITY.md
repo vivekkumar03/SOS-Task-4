@@ -41,17 +41,6 @@ The review covers [crypto_common.c](vuln_lab/crypto_common.c), [crypto_common.h]
 | F09 | Ordinary error paths bypassed secret cleanup | [CWE-226: Sensitive Information in Resource Not Cleared Before Reuse](https://cwe.mitre.org/data/definitions/226.html); [CWE-459: Incomplete Cleanup](https://cwe.mitre.org/data/definitions/459.html) | Fixed for ordinary returns; signal-exit exception remains |
 | F10 | Unchecked BIO memory-buffer result | [CWE-252: Unchecked Return Value](https://cwe.mitre.org/data/definitions/252.html); potential [CWE-476: NULL Pointer Dereference](https://cwe.mitre.org/data/definitions/476.html) consequence | Defensive gap closed; no exploit demonstrated |
 
-## Related CWE/CVE Examples
-
-The CVEs below are real examples from other products. They illustrate the CWE categories; they are not CVEs for this project and do not establish that this code has the same vulnerability.
-
-| CWE | External NVD example | Relationship to this project |
-| --- | --- | --- |
-| CWE-120: Buffer Copy without Checking Size of Input | [CVE-2020-5133](https://nvd.nist.gov/vuln/detail/CVE-2020-5133): SonicOS buffer-overflow denial of service | Not identified here. Bounded input truncation is not evidence of an unchecked-copy overflow. |
-| CWE-400: Uncontrolled Resource Consumption | [CVE-2023-21090](https://nvd.nist.gov/vuln/detail/CVE-2023-21090): Android permission-parser resource exhaustion | Analogous weakness class to F05; the lab's file-allocation issue is fixed. |
-| CWE-476: NULL Pointer Dereference | [CVE-2022-40476](https://nvd.nist.gov/vuln/detail/CVE-2022-40476): Linux `io_uring` null-pointer dereference | Potential consequence of F10's earlier unchecked result, not a demonstrated failure here. |
-| CWE-457: Use of Uninitialized Variable | [CVE-2026-11137](https://nvd.nist.gov/vuln/detail/CVE-2026-11137): Chrome ANGLE uninitialized use | Not identified here; included only as an external teaching example. |
-
 ## Historical Findings and Fixes
 
 ### 1. GCM Authentication Result Was Ignored (Fixed)
@@ -202,3 +191,14 @@ All previous headerless ciphertext formats are rejected, including the later ran
 | Platform and audit coverage | Verification gap | Linux runtime, exhaustive fault handling and production suitability remain unverified |
 
 **Conclusion:** The documented remediations improve the learning example substantially. They do not remove the need for strong passphrases, trusted directories, careful migration and independent review before any production use.
+
+## Related CWE/CVE Examples
+
+The CVEs below are real examples from other products. They illustrate the CWE categories; they are not CVEs for this project and do not establish that this code has the same vulnerability.
+
+| CWE | External NVD example | Relationship to this project |
+| --- | --- | --- |
+| CWE-120: Buffer Copy without Checking Size of Input | [CVE-2020-5133](https://nvd.nist.gov/vuln/detail/CVE-2020-5133): SonicOS buffer-overflow denial of service | Not identified here. Bounded input truncation is not evidence of an unchecked-copy overflow. |
+| CWE-400: Uncontrolled Resource Consumption | [CVE-2023-21090](https://nvd.nist.gov/vuln/detail/CVE-2023-21090): Android permission-parser resource exhaustion | Analogous weakness class to F05; the lab's file-allocation issue is fixed. |
+| CWE-476: NULL Pointer Dereference | [CVE-2022-40476](https://nvd.nist.gov/vuln/detail/CVE-2022-40476): Linux `io_uring` null-pointer dereference | Potential consequence of F10's earlier unchecked result, not a demonstrated failure here. |
+| CWE-457: Use of Uninitialized Variable | [CVE-2026-11137](https://nvd.nist.gov/vuln/detail/CVE-2026-11137): Chrome ANGLE uninitialized use | Not identified here; included only as an external teaching example. |
