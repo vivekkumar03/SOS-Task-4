@@ -30,16 +30,16 @@ The review covers [crypto_common.c](vuln_lab/crypto_common.c), [crypto_common.h]
 
 | ID | Historical issue | CWE mapping | Current status |
 | --- | --- | --- | --- |
-| F01 | GCM tag-verification result ignored | [CWE-354](https://cwe.mitre.org/data/definitions/354.html) | Fixed: output follows successful authentication |
-| F02 | Constant salt and GCM nonce | [CWE-323](https://cwe.mitre.org/data/definitions/323.html), [CWE-760](https://cwe.mitre.org/data/definitions/760.html) | Fixed: fresh cryptographic randomness |
-| F03 | One PBKDF2 iteration | [CWE-916](https://cwe.mitre.org/data/definitions/916.html) | Fixed: 600,000 iterations for encryption |
-| F04 | Header-length subtraction before validation | [CWE-20](https://cwe.mitre.org/data/definitions/20.html), [CWE-191](https://cwe.mitre.org/data/definitions/191.html), [CWE-125](https://cwe.mitre.org/data/definitions/125.html) | Fixed: validate before pointer/length use |
-| F05 | Unbounded ciphertext-file allocation | [CWE-789](https://cwe.mitre.org/data/definitions/789.html), [CWE-400](https://cwe.mitre.org/data/definitions/400.html) | Fixed: encoded and decoded size caps |
-| F06 | Permissive Base64 and NUL/trailing-data handling | [CWE-20](https://cwe.mitre.org/data/definitions/20.html) | Fixed: canonical decoding and exact framing |
-| F07 | Silent message/password truncation | [CWE-20](https://cwe.mitre.org/data/definitions/20.html) | Fixed: drain and reject invalid lines |
-| F08 | Output path could follow a symlink | [CWE-59](https://cwe.mitre.org/data/definitions/59.html) | Fixed: refuse symlinks and restrict file operations |
-| F09 | Ordinary error paths bypassed secret cleanup | [CWE-226](https://cwe.mitre.org/data/definitions/226.html), [CWE-459](https://cwe.mitre.org/data/definitions/459.html) | Fixed for ordinary returns; signal-exit exception remains |
-| F10 | Unchecked BIO memory-buffer result | [CWE-252](https://cwe.mitre.org/data/definitions/252.html); potential [CWE-476](https://cwe.mitre.org/data/definitions/476.html) consequence | Defensive gap closed; no exploit demonstrated |
+| F01 | GCM tag-verification result ignored | [CWE-354: Improper Validation of Integrity Check Value](https://cwe.mitre.org/data/definitions/354.html) | Fixed: output follows successful authentication |
+| F02 | Constant salt and GCM nonce | [CWE-323: Reusing a Nonce, Key Pair in Encryption](https://cwe.mitre.org/data/definitions/323.html); [CWE-760: Use of a One-Way Hash with a Predictable Salt](https://cwe.mitre.org/data/definitions/760.html) | Fixed: fresh cryptographic randomness |
+| F03 | One PBKDF2 iteration | [CWE-916: Use of Password Hash With Insufficient Computational Effort](https://cwe.mitre.org/data/definitions/916.html) | Fixed: 600,000 iterations for encryption |
+| F04 | Header-length subtraction before validation | [CWE-20: Improper Input Validation](https://cwe.mitre.org/data/definitions/20.html); [CWE-191: Integer Underflow](https://cwe.mitre.org/data/definitions/191.html); [CWE-125: Out-of-bounds Read](https://cwe.mitre.org/data/definitions/125.html) | Fixed: validate before pointer/length use |
+| F05 | Unbounded ciphertext-file allocation | [CWE-789: Memory Allocation with Excessive Size](https://cwe.mitre.org/data/definitions/789.html); [CWE-400: Uncontrolled Resource Consumption](https://cwe.mitre.org/data/definitions/400.html) | Fixed: encoded and decoded size caps |
+| F06 | Permissive Base64 and NUL/trailing-data handling | [CWE-20: Improper Input Validation](https://cwe.mitre.org/data/definitions/20.html) | Fixed: canonical decoding and exact framing |
+| F07 | Silent message/password truncation | [CWE-20: Improper Input Validation](https://cwe.mitre.org/data/definitions/20.html) | Fixed: drain and reject invalid lines |
+| F08 | Output path could follow a symlink | [CWE-59: Improper Link Resolution Before File Access](https://cwe.mitre.org/data/definitions/59.html) | Fixed: refuse symlinks and restrict file operations |
+| F09 | Ordinary error paths bypassed secret cleanup | [CWE-226: Sensitive Information in Resource Not Cleared Before Reuse](https://cwe.mitre.org/data/definitions/226.html); [CWE-459: Incomplete Cleanup](https://cwe.mitre.org/data/definitions/459.html) | Fixed for ordinary returns; signal-exit exception remains |
+| F10 | Unchecked BIO memory-buffer result | [CWE-252: Unchecked Return Value](https://cwe.mitre.org/data/definitions/252.html); potential [CWE-476: NULL Pointer Dereference](https://cwe.mitre.org/data/definitions/476.html) consequence | Defensive gap closed; no exploit demonstrated |
 
 ## Related CWE/CVE Examples
 
@@ -195,10 +195,10 @@ All previous headerless ciphertext formats are rejected, including the later ran
 
 | Remaining consideration | Related CWE or scope | Practical limitation |
 | --- | --- | --- |
-| Offline password guessing | CWE-521 / CWE-916 risk area | Minimum length and PBKDF2 do not guarantee password strength |
+| Offline password guessing | CWE-521: Weak Password Requirements / CWE-916: Use of Password Hash With Insufficient Computational Effort risk area | Minimum length and PBKDF2 do not guarantee password strength |
 | Confirmed-replacement race | CWE-367: Time-of-check Time-of-use Race Condition | Device/inode recheck and rename are separate operations; use a private directory |
-| Parent-directory links | CWE-59 scope limit | `O_NOFOLLOW` protects only the final input component |
-| Abrupt termination | CWE-459 / CWE-226 scope limit | Uncatchable signals cannot restore state; handled signal exits skip ordinary cleansing |
+| Parent-directory links | CWE-59: Improper Link Resolution Before File Access scope limit | `O_NOFOLLOW` protects only the final input component |
+| Abrupt termination | CWE-459: Incomplete Cleanup / CWE-226: Sensitive Information in Resource Not Cleared Before Reuse scope limit | Uncatchable signals cannot restore state; handled signal exits skip ordinary cleansing |
 | Platform and audit coverage | Verification gap | Linux runtime, exhaustive fault handling and production suitability remain unverified |
 
 **Conclusion:** The documented remediations improve the learning example substantially. They do not remove the need for strong passphrases, trusted directories, careful migration and independent review before any production use.
